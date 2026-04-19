@@ -25,6 +25,9 @@ population_large_total = sum(large_settlements.values())
 rural_population = population_total - population_large_total
 TOTAL_SHEEP = 139_056
 
+user_input = input("Учитывать уничтожение всего стада при обнаружении болезни? (y/n): ").strip().lower()
+ENABLE_CULL = user_input in ["y", "yes", "да"]
+
 village_names = [
     "Aygevan","Araks","Lenughi","Lukashin","Hatsik","Myasnikyan","Sardarapat","Voskehat",
     "Alashkert","Aknalich","Arevik","Argavand","Getashen","Mrgashat","Nalbandyan","Nor_Artagers",
@@ -106,7 +109,7 @@ residual_env_after_cull = 0.2
 # ----------------------
 # Инициализация patient zero (увеличено число зараженных для феерии)
 # ----------------------
-rng = np.random.default_rng(12345)
+rng = np.random.default_rng()
 init_village = rng.integers(num_villages)
 init_count = max(5, int(0.001 * S[init_village]))  # чуть больше зараженных
 E[init_village] += init_count
@@ -195,20 +198,22 @@ for month in range(1, months_total + 1):
     I = I - out_I + incoming_I
 
     # Schedule cull
-    newly_clinical = (I > 0) & (~cull_scheduled)
-    for v in np.where(newly_clinical)[0]:
-        cull_scheduled[v] = True
-        cull_day[v] = month + delay_cull_months
-        ENV[v] = min(1.0, ENV[v] + 0.1)
+    if ENABLE_CULL:
+        newly_clinical = (I > 0) & (~cull_scheduled)
+        for v in np.where(newly_clinical)[0]:
+            cull_scheduled[v] = True
+            cull_day[v] = month + delay_cull_months
+            ENV[v] = min(1.0, ENV[v] + 0.1)
 
     # Execute culls
-    to_cull = np.where((cull_scheduled) & (month >= cull_day))[0]
-    for v in to_cull:
-        D[v] += S[v] + E[v] + I[v]
-        S[v] = E[v] = I[v] = 0.0
-        ENV[v] *= residual_env_after_cull
-        cull_scheduled[v] = False
-        cull_day[v] = 10**9
+    if ENABLE_CULL:
+        to_cull = np.where((cull_scheduled) & (month >= cull_day))[0]
+        for v in to_cull:
+            D[v] += S[v] + E[v] + I[v]
+            S[v] = E[v] = I[v] = 0.0
+            ENV[v] *= residual_env_after_cull
+            cull_scheduled[v] = False
+            cull_day[v] = 10**9
 
     # Save stats
     history["S"][month] = S.sum()
